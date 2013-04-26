@@ -4,15 +4,16 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.IO;
 using System.Diagnostics;
+using System.Threading;
 
 namespace DJExplorer
 {
     public partial class MainForm : Form
     {
-        string targetDir = @"\\fe.baidu.com\zhangdongdong02\public_html";
-        string nppPath = @"C:\Program Files\Notepad++\notepad++.exe";
+        string nppPath = "";
 
-        ContextMenuStrip treeContextMenu;
+        ContextMenuStrip folderContextMenu;
+        ContextMenuStrip fileContextMenu;
 
         public MainForm()
         {
@@ -22,19 +23,27 @@ namespace DJExplorer
 
         private void init()
         {
-            initFormRect();
+            readConf();
             initTreeImages();
-            addNode(fileTree, buildNode(targetDir));
             initNpp();
             initContextMenu();
         }
 
-        // 设置窗口大小
-        private void initFormRect()
+        private void readConf()
         {
-            Rectangle win = SystemInformation.WorkingArea;
-            this.Height = win.Height;
-            this.Location = new Point(win.Width - this.Width, 0);
+            string path = "conf";
+
+            if (!File.Exists(path)) return;
+            StreamReader confReader = new StreamReader(path);
+            nppPath = confReader.ReadLine().Trim();
+            if (!File.Exists(nppPath)) MessageBox.Show("搞毛线，指定的npp路径有问题啊~~！");
+
+            string line;
+            while ((line = confReader.ReadLine()) != null)
+            {
+                NodeHelper.add(fileTree, buildNode(line));
+            }
+            confReader.Close();
         }
 
         private void initTreeImages()
@@ -48,16 +57,83 @@ namespace DJExplorer
         // 右键菜单
         private void initContextMenu()
         {
-            treeContextMenu = new ContextMenuStrip();
+            // folder
+            folderContextMenu = new ContextMenuStrip();
 
-            ToolStripMenuItem updateItem = new ToolStripMenuItem("更新");
-            updateItem.Click += new EventHandler(updateItem_Click);
+            ToolStripMenuItem folderUpdate = new ToolStripMenuItem("更新");
+            folderUpdate.Click += new EventHandler(updateItem_Click);
 
-            ToolStripMenuItem deleteItem = new ToolStripMenuItem("删除");
-            deleteItem.Click += new EventHandler(deleteItem_Click);
+            ToolStripMenuItem folderDelete = new ToolStripMenuItem("删除");
+            folderDelete.Click += new EventHandler(deleteItem_Click);
 
-            treeContextMenu.Items.Add(updateItem);
-            treeContextMenu.Items.Add(deleteItem);
+            ToolStripMenuItem folderAdd = new ToolStripMenuItem("新建文件夹");
+            folderAdd.Click += new EventHandler(folderAdd_Click);
+
+            ToolStripMenuItem fileAdd = new ToolStripMenuItem("新建文件");
+            fileAdd.Click += new EventHandler(fileAdd_Click);
+
+            folderContextMenu.Items.Add(folderUpdate);
+            folderContextMenu.Items.Add(folderDelete);
+            folderContextMenu.Items.Add(folderAdd);
+            folderContextMenu.Items.Add(fileAdd);
+
+            // file
+            fileContextMenu = new ContextMenuStrip();
+
+            ToolStripMenuItem fileUpdate = new ToolStripMenuItem("更新");
+            fileUpdate.Click += new EventHandler(updateItem_Click);
+
+            ToolStripMenuItem fileDelete = new ToolStripMenuItem("移除");
+            fileDelete.Click += new EventHandler(deleteItem_Click);
+
+            ToolStripMenuItem fileOpen = new ToolStripMenuItem("打开");
+            fileOpen.Click += new EventHandler(openItem_Click);
+
+
+            fileContextMenu.Items.Add(fileUpdate);
+            fileContextMenu.Items.Add(fileDelete);
+            fileContextMenu.Items.Add(fileOpen);
+        }
+
+        void fileAdd_Click(object sender, EventArgs e)
+        {
+            ffAdd("新建文件", true);
+        }
+
+        void folderAdd_Click(object sender, EventArgs e)
+        {
+            ffAdd("新建文件夹", false);
+        }
+
+        private void ffAdd(string initText, bool isFile)
+        {
+            DJNode selectNode = fileTree.SelectedNode as DJNode;
+            DJNode node = new DJNode(initText, selectNode.filePath, isFile);
+            NodeHelper.add(selectNode, node);
+
+            fileTree.SelectedNode = node;
+            node.BeginEdit();
+        }
+
+        private void fileTree_AfterLabelEdit(object sender, NodeLabelEditEventArgs e)
+        {
+            DJNode node = fileTree.SelectedNode as DJNode;
+            node.filePath = node.filePath + "/" + e.Label.Trim();
+            if (node.isFile)
+            {
+                if (!File.Exists(node.filePath)) File.Create(node.filePath);
+            }
+            else
+            {
+                if (!Directory.Exists(node.filePath)) Directory.CreateDirectory(node.filePath);
+            }
+            node.EndEdit(true);
+        }
+
+        void openItem_Click(object sender, EventArgs e)
+        {
+            DJNode selectNode = fileTree.SelectedNode as DJNode;
+            Process.Start(selectNode.filePath);
         }
 
         void updateItem_Click(object sender, EventArgs e)
@@ -67,11 +143,13 @@ namespace DJExplorer
             if (selectNode.isFile == true) return;
 
             int idx = selectNode.Index;
-            DJNode parent = selectNode.Parent as DJNode;
-
             DJNode newNode = buildNode(selectNode.filePath);
+
+            if (selectNode.Parent == null) selectNode.TreeView.Nodes.Insert(idx, newNode);
+            else selectNode.Parent.Nodes.Insert(idx, newNode);
+
             selectNode.Remove();
-            parent.Nodes.Insert(idx, newNode);
+
             fileTree.SelectedNode = newNode;
         }
 
@@ -90,17 +168,12 @@ namespace DJExplorer
 
         private void openFile(string filePath)
         {
+            if (!File.Exists(filePath))
+            {
+                MessageBox.Show("此文件不存在咯~~！");
+                return;
+            }
             Process.Start(nppPath, filePath);
-        }
-
-        private void addNode(DJNode parent, DJNode child)
-        {
-            if (parent != null && child != null) parent.Nodes.Add(child);
-        }
-
-        private void addNode(TreeView parent, DJNode child)
-        {
-            if (parent != null && child != null) parent.Nodes.Add(child);
         }
 
         // 文件是否具有隐藏属性
@@ -115,7 +188,10 @@ namespace DJExplorer
         // 创建节点
         private DJNode buildNode(string path)
         {
+            path = path.Trim();
+            if (!File.Exists(path) && !Directory.Exists(path)) return null;
             if (isHiddenFile(path)) return null;
+
             if (File.Exists(path))
             {
                 FileInfo file = new FileInfo(path);
@@ -130,12 +206,12 @@ namespace DJExplorer
                 DirectoryInfo[] dirs = dir.GetDirectories();
                 for (int i = 0, len = dirs.Length; i < len; i++)
                 {
-                    addNode(DNode, buildNode(dirs[i].FullName));
+                    NodeHelper.add(DNode, buildNode(dirs[i].FullName));
                 }
                 FileInfo[] files = dir.GetFiles();
                 for (int i = 0, len = files.Length; i < len; i++)
                 {
-                    addNode(DNode, buildNode(files[i].FullName));
+                    NodeHelper.add(DNode, buildNode(files[i].FullName));
                 }
 
                 return DNode;
@@ -165,7 +241,7 @@ namespace DJExplorer
             for (int i = 0, len = files.Length; i < len; i++)
             {
                 string file = files[i];
-                addNode(fileTree, buildNode(file));
+                NodeHelper.add(fileTree, buildNode(file));
             }
         }
 
@@ -174,10 +250,12 @@ namespace DJExplorer
         {
             if (e.Button != MouseButtons.Right) return;
             Point clickPoint = new Point(e.X, e.Y);
-            TreeNode node = fileTree.GetNodeAt(clickPoint);
+            DJNode node = fileTree.GetNodeAt(clickPoint) as DJNode;
             if (node == null) return;
 
-            node.ContextMenuStrip = treeContextMenu;
+            if (node.isFile) node.ContextMenuStrip = fileContextMenu;
+            else node.ContextMenuStrip = folderContextMenu;
+
             fileTree.SelectedNode = node;
         }
     }
@@ -205,5 +283,21 @@ namespace DJExplorer
             this.isFile = _isFile;
             filePath = _filePath;
         }
+    }
+
+    public static class NodeHelper
+    {
+        public static int add(TreeView tree, DJNode node)
+        {
+            if (tree == null || node == null) return -1;
+            return tree.Nodes.Add(node);
+        }
+
+        public static int add(DJNode parent, DJNode child)
+        {
+            if (parent == null || child == null) return -1;
+            return parent.Nodes.Add(child);
+        }
+
     }
 }
