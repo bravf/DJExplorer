@@ -60,39 +60,55 @@ namespace DJExplorer
             // folder
             folderContextMenu = new ContextMenuStrip();
 
-            ToolStripMenuItem folderUpdate = new ToolStripMenuItem("更新");
-            folderUpdate.Click += new EventHandler(updateItem_Click);
-
-            ToolStripMenuItem folderDelete = new ToolStripMenuItem("删除");
-            folderDelete.Click += new EventHandler(deleteItem_Click);
-
             ToolStripMenuItem folderAdd = new ToolStripMenuItem("新建文件夹");
             folderAdd.Click += new EventHandler(folderAdd_Click);
 
             ToolStripMenuItem fileAdd = new ToolStripMenuItem("新建文件");
             fileAdd.Click += new EventHandler(fileAdd_Click);
 
-            folderContextMenu.Items.Add(folderUpdate);
-            folderContextMenu.Items.Add(folderDelete);
+            ToolStripMenuItem folderUpdate = new ToolStripMenuItem("更新");
+            folderUpdate.Click += new EventHandler(updateItem_Click);
+
+            ToolStripMenuItem folderRemove = new ToolStripMenuItem("移除");
+            folderRemove.Click += new EventHandler(removeItem_Click);
+
+            ToolStripMenuItem folderDelete = new ToolStripMenuItem("删除");
+            folderDelete.Click += new EventHandler(delete_Click);
+
             folderContextMenu.Items.Add(folderAdd);
             folderContextMenu.Items.Add(fileAdd);
+            folderContextMenu.Items.Add(folderUpdate);
+            folderContextMenu.Items.Add(folderRemove);
+            folderContextMenu.Items.Add(folderDelete);
 
             // file
             fileContextMenu = new ContextMenuStrip();
 
-            ToolStripMenuItem fileUpdate = new ToolStripMenuItem("更新");
-            fileUpdate.Click += new EventHandler(updateItem_Click);
-
-            ToolStripMenuItem fileDelete = new ToolStripMenuItem("移除");
-            fileDelete.Click += new EventHandler(deleteItem_Click);
-
             ToolStripMenuItem fileOpen = new ToolStripMenuItem("打开");
             fileOpen.Click += new EventHandler(openItem_Click);
 
+            ToolStripMenuItem fileRemove = new ToolStripMenuItem("移除");
+            fileRemove.Click += new EventHandler(removeItem_Click);
 
-            fileContextMenu.Items.Add(fileUpdate);
-            fileContextMenu.Items.Add(fileDelete);
+            ToolStripMenuItem fileDelete = new ToolStripMenuItem("删除");
+            fileDelete.Click += new EventHandler(delete_Click);
+
+            fileContextMenu.Items.Add(fileRemove);
             fileContextMenu.Items.Add(fileOpen);
+            fileContextMenu.Items.Add(fileDelete);
+        }
+
+        void delete_Click(object sender, EventArgs e)
+        {
+            DJNode selectNode = fileTree.SelectedNode as DJNode;
+            if (selectNode == null) return;
+
+            if (MessageBox.Show("哥，你正在删除 '" + selectNode.filePath + "' 注意点，别删错了~~！", "上帝保佑你", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.No) return;
+
+            selectNode.Remove();
+
+            if (selectNode.isFile) File.Delete(selectNode.filePath);
+            else Directory.Delete(selectNode.filePath);
         }
 
         void fileAdd_Click(object sender, EventArgs e)
@@ -118,7 +134,7 @@ namespace DJExplorer
         private void fileTree_AfterLabelEdit(object sender, NodeLabelEditEventArgs e)
         {
             DJNode node = fileTree.SelectedNode as DJNode;
-            node.filePath = node.filePath + "/" + e.Label.Trim();
+            node.filePath = node.filePath + @"\" + ((e.Label!=null) ? e.Label : node.Text).Trim();
             if (node.isFile)
             {
                 if (!File.Exists(node.filePath)) File.Create(node.filePath);
@@ -153,7 +169,7 @@ namespace DJExplorer
             fileTree.SelectedNode = newNode;
         }
 
-        void deleteItem_Click(object sender, EventArgs e)
+        void removeItem_Click(object sender, EventArgs e)
         {
             DJNode selectNode = fileTree.SelectedNode as DJNode;
             if (selectNode == null) return;
